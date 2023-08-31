@@ -17,7 +17,6 @@
 package logic
 
 import (
-	"fmt"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -315,7 +314,7 @@ func onHealthTick() {
 			orcraft.Yield()
 		}
 		if process.SinceLastGoodHealthCheck() > fatalAfterUnhealthyDuration {
-			orcraft.FatalRaftError(fmt.Errorf("Node is unable to register health. Please check database connnectivity and/or time synchronisation."))
+			//orcraft.FatalRaftError(fmt.Errorf("Node is unable to register health. Please check database connnectivity and/or time synchronisation."))
 		}
 	}
 	if !orcraft.IsRaftEnabled() {

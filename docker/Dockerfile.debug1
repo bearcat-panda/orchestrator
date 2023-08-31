@@ -1,0 +1,78 @@
+# Requires Docker 17.09 or later (multi stage builds)
+#
+# Orchestrator will look for a configuration file at /etc/orchestrator.conf.json.
+# It will listen on port 3000.
+# If not present a minimal configuration will be generated using the following environment variables:
+#
+# Default variables which can be used are:
+#
+# ORC_TOPOLOGY_USER (default: orchestrator): username used by orchestrator to login to MySQL when polling/discovering
+# ORC_TOPOLOGY_PASSWORD (default: orchestrator):  password needed to login to MySQL when polling/discovering
+# ORC_DB_HOST (default: orchestrator):  orchestrator backend MySQL host
+# ORC_DB_PORT (default: 3306):  port used by orchestrator backend MySQL server
+# ORC_DB_NAME (default: orchestrator): database named used by orchestrator backend MySQL server
+# ORC_USER (default: orc_server_user): username used to login to orchestrator backend MySQL server
+# ORC_PASSWORD (default: orc_server_password): password used to login to orchestrator backend MySQL server
+
+FROM golang:1.16.6-alpine3.14 as build
+
+ENV GOPATH=/tmp/go
+
+RUN apk --no-cache add libcurl rsync gcc g++ build-base bash git musl-dev openssl perl-utils
+
+RUN mkdir -p $GOPATH/src/github.com/openark/orchestrator
+WORKDIR $GOPATH/src/github.com/openark/orchestrator
+COPY . .
+RUN dos2unix build.sh
+RUN bash build.sh -b -P
+RUN rsync -av $(find /tmp/orchestrator-release -type d -name orchestrator -maxdepth 2)/ /
+RUN rsync -av $(find /tmp/orchestrator-release -type d -name orchestrator-client -maxdepth 2)/ /
+RUN cp conf/orchestrator-sample-sqlite.conf.json /etc/orchestrator.conf.json
+RUN cp conf/orc-topology.cnf /etc/orc-topology.cnf
+
+
+
+FROM alpine:3.12
+
+USER root
+ENV DOCKERIZE_VERSION v0.6.1
+RUN set -ex \
+    && apk add --update --no-cache \
+        curl \
+        wget \
+        tar \
+        openssl \
+    && mkdir /etc/orchestrator /var/lib/orchestrator \
+
+    && wget https://ghproxy.com/https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-alpine-linux-amd64-$DOCKERIZE_VERSION.tar.gz -O- | \
+        tar -C /usr/local/bin -xzv
+
+RUN apk --no-cache add bash curl jq
+RUN touch /etc/orchestrator/orc.db
+RUN touch /var/lib/orchestrator/orc.db
+RUN touch /etc/orchestrator/orchestrator.sqlite3
+
+
+COPY --from=build /usr/local/orchestrator /usr/local/orchestrator
+COPY --from=build /usr/bin/orchestrator-client /usr/bin/orchestrator-client
+COPY --from=build /etc/orchestrator.conf.json /etc/orchestrator/orchestrator.conf.json
+COPY --from=build /etc/orc-topology.cnf /etc/orchestrator/orc-topology.cnf
+
+RUN chmod 777 /etc/orchestrator/*
+RUN chmod 777 /var/lib/orchestrator/*
+RUN chmod 777 /etc/orchestrator/*
+
+
+
+EXPOSE 3000 10008
+
+ENTRYPOINT [ "/usr/local/bin/dockerize", \
+             "-no-overwrite", \
+             "-template", \
+             "/usr/local/share/orchestrator/templates/orchestrator.conf.json:/etc/orchestrator/orchestrator.conf.json", \
+             "-template", \
+             "/usr/local/share/orchestrator/templates/orc-topology.cnf:/etc/orchestrator/orc-topology.cnf", \
+             "--" ]
+
+
+CMD ["/usr/local/orchestrator/orchestrator", "-quiet", "-config", "/etc/orchestrator/orchestrator.conf.json", "http"]

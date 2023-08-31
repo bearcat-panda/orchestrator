@@ -11,7 +11,7 @@
   "MySQLTopologySSLSkipVerify": true,
   "MySQLTopologyUseMutualTLS": false,
   "BackendDB": "sqlite",
-  "SQLite3DataFile": "/usr/local/orchestrator/orchestrator.sqlite3",
+  "SQLite3DataFile": "/etc/orchestrator/orchestrator.sqlite3",
   "MySQLConnectTimeoutSeconds": 1,
   "DefaultInstancePort": 3306,
   "DiscoverByShowSlaveHosts": true,
