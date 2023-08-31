@@ -3,6 +3,7 @@ module github.com/openark/orchestrator
 go 1.16
 
 require (
+	github.com/RackSec/srslog v0.0.0-20180709174129-a4725f04ec91 // indirect
 	github.com/armon/consul-api v0.0.0-20180202201655-eb2c6b5be1b6
 	github.com/codegangsta/inject v0.0.0-20150114235600-33e0aa1cb7c0 // indirect
 	github.com/cyberdelia/go-metrics-graphite v0.0.0-20161219230853-39f87cc3b432
@@ -25,6 +26,7 @@ require (
 	github.com/martini-contrib/gzip v0.0.0-20151124214156-6c035326b43f
 	github.com/martini-contrib/render v0.0.0-20150707142108-ec18f8345a11
 	github.com/mattn/go-isatty v0.0.13-0.20200128103942-cb30d6282491 // indirect
+	github.com/mattn/go-sqlite3 v1.14.7
 	github.com/miekg/dns v1.1.31 // indirect
 	github.com/mitchellh/go-testing-interface v1.14.0 // indirect
 	github.com/mitchellh/mapstructure v1.3.3 // indirect

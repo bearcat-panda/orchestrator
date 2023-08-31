@@ -1,3 +1,6 @@
+# github.com/RackSec/srslog v0.0.0-20180709174129-a4725f04ec91
+## explicit
+github.com/RackSec/srslog
 # github.com/armon/consul-api v0.0.0-20180202201655-eb2c6b5be1b6
 ## explicit
 github.com/armon/consul-api
@@ -68,6 +71,7 @@ github.com/mattn/go-colorable
 ## explicit
 github.com/mattn/go-isatty
 # github.com/mattn/go-sqlite3 v1.14.7
+## explicit
 github.com/mattn/go-sqlite3
 # github.com/miekg/dns v1.1.31
 ## explicit

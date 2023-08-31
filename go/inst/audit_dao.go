@@ -18,7 +18,7 @@ package inst
 
 import (
 	"fmt"
-	"log/syslog"
+	syslog "github.com/RackSec/srslog"
 	"os"
 	"time"
 

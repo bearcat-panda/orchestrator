@@ -19,7 +19,7 @@ package log
 import (
 	"errors"
 	"fmt"
-	"log/syslog"
+	syslog "github.com/RackSec/srslog"
 	"os"
 	"runtime/debug"
 	"time"
