@@ -71,7 +71,12 @@ var recentDiscoveryOperationKeys *cache.Cache
 var pseudoGTIDPublishCache = cache.New(time.Minute, time.Second)
 var kvFoundCache = cache.New(10*time.Minute, time.Minute)
 
+// 故障转移全局开关
+var RunCheckAndRecover bool
+
 func init() {
+	RunCheckAndRecover = true
+
 	snapshotDiscoveryKeys = make(chan inst.InstanceKey, 10)
 
 	metrics.Register("discoveries.attempt", discoveriesCounter)
@@ -598,6 +603,10 @@ func ContinuousDiscovery() {
 					go AcknowledgeCrashedRecoveries()
 					go inst.ExpireInstanceAnalysisChangelog()
 
+					//如果关闭. 则不执行 故障转移
+					if !RunCheckAndRecover {
+						return
+					}
 					go func() {
 						// This function is non re-entrant (it can only be running once at any point in time)
 						if atomic.CompareAndSwapInt64(&recoveryEntrance, 0, 1) {

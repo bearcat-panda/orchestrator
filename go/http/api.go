@@ -3652,6 +3652,24 @@ func (this *HttpAPI) CheckGlobalRecoveries(params martini.Params, r render.Rende
 	Respond(r, &APIResponse{Code: OK, Message: fmt.Sprintf("Global recoveries %+v", details), Details: details})
 }
 
+// CheckGlobalRecoveries checks whether
+func (this *HttpAPI) UpdateCheckAndRecover(params martini.Params, r render.Render, req *http.Request) {
+	runString, ok := params["run"]
+	if ok {
+		switch runString {
+		case "true":
+			logic.RunCheckAndRecover = true
+		case "false":
+			logic.RunCheckAndRecover = false
+		}
+	} else {
+		Respond(r, &APIResponse{Code: ERROR, Message: "没有传递参数:run"})
+		return
+	}
+
+	Respond(r, &APIResponse{Code: OK, Message: fmt.Sprintf("update CheckAndRecover run : %+v", logic.RunCheckAndRecover)})
+}
+
 func (this *HttpAPI) getSynonymPath(path string) (synonymPath string) {
 	pathBase := strings.Split(path, "/")[0]
 	if synonym, ok := apiSynonyms[pathBase]; ok {
@@ -3884,6 +3902,7 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	this.registerAPIRequest(m, "disable-global-recoveries", this.DisableGlobalRecoveries)
 	this.registerAPIRequest(m, "enable-global-recoveries", this.EnableGlobalRecoveries)
 	this.registerAPIRequest(m, "check-global-recoveries", this.CheckGlobalRecoveries)
+	this.registerAPIRequest(m, "check-and-recover/:run", this.UpdateCheckAndRecover)
 
 	// General
 	this.registerAPIRequest(m, "problems", this.Problems)
