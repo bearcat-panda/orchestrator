@@ -17,6 +17,7 @@
 package logic
 
 import (
+	"github.com/openark/orchestrator/go/nodes"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -489,6 +490,9 @@ func ContinuousDiscovery() {
 	inst.LoadHostnameResolveCache()
 	go handleDiscoveryRequests()
 
+	// 获取节点信息
+	nodes.NodeListWatch()
+
 	healthTick := time.Tick(config.HealthPollSeconds * time.Second)
 	instancePollTick := time.Tick(instancePollSecondsDuration())
 	caretakingTick := time.Tick(time.Minute)
@@ -671,3 +675,4 @@ func discoverSeededAgents() {
 		go inst.ReadTopologyInstance(instanceKey)
 	}
 }
+

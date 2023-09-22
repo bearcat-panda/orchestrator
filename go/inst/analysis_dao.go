@@ -18,6 +18,7 @@ package inst
 
 import (
 	"fmt"
+	"github.com/openark/orchestrator/go/nodes"
 	"regexp"
 	"time"
 
@@ -620,6 +621,10 @@ func GetReplicationAnalysis(clusterName string, hints *ReplicationAnalysisHints)
 				a.Analysis = FirstTierReplicaFailingToConnectToMaster
 				a.Description = "1st tier replica (directly replicating from topology master) is unable to connect to the master"
 				//
+			} else if ok, _ := nodes.IsServerDrift(a.AnalyzedInstanceKey.Hostname); ok {
+				// 判断当前服务是否需要漂移
+				a.Analysis = ServerDrift
+				a.Description = "There is a problem with the current node and the service needs to be drifted"
 			}
 			//		 else if a.IsMaster && a.CountReplicas == 0 {
 			//			a.Analysis = MasterWithoutReplicas
@@ -708,7 +713,10 @@ func GetReplicationAnalysis(clusterName string, hints *ReplicationAnalysisHints)
 			if a.IsMaster && a.SemiSyncMasterEnabled && !a.SemiSyncMasterStatus && a.SemiSyncMasterWaitForReplicaCount > 0 && a.SemiSyncMasterClients < a.SemiSyncMasterWaitForReplicaCount {
 				a.StructureAnalysis = append(a.StructureAnalysis, NotEnoughValidSemiSyncReplicasStructureWarning)
 			}
+
+
 		}
+
 		appendAnalysis(&a)
 
 		if a.CountReplicas > 0 && hints.AuditAnalysis {

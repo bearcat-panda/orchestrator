@@ -17,9 +17,12 @@
 package logic
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/openark/orchestrator/go/nodes"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"math/rand"
 	goos "os"
 	"sort"
@@ -39,6 +42,7 @@ import (
 	"github.com/openark/orchestrator/go/util"
 	"github.com/patrickmn/go-cache"
 	"github.com/rcrowley/go-metrics"
+	policyv1 "k8s.io/api/policy/v1"
 )
 
 var countPendingRecoveries int64
@@ -1707,6 +1711,8 @@ func getCheckAndRecoverFunction(analysisCode inst.AnalysisCode, analyzedInstance
 	isActionableRecovery bool,
 ) {
 	switch analysisCode {
+	case inst.ServerDrift:
+		return ServerDrift, true
 	// master
 	case inst.DeadMaster, inst.DeadMasterAndSomeReplicas:
 		if isInEmergencyOperationGracefulPeriod(analyzedInstanceKey) {
@@ -2224,4 +2230,26 @@ func GracefulMasterTakeover(clusterName string, designatedKey *inst.InstanceKey,
 	executeProcesses(config.Config.PostGracefulTakeoverProcesses, "PostGracefulTakeoverProcesses", topologyRecovery, false)
 
 	return topologyRecovery, promotedMasterCoordinates, err
+}
+
+func ServerDrift(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *inst.InstanceKey, forceInstanceRecovery bool, skipProcesses bool) (recoveryAttempted bool, topologyRecovery *TopologyRecovery, err error)  {
+	ok, pod := nodes.IsServerDrift(analysisEntry.AnalyzedInstanceKey.Hostname)
+	if ok {
+		gracePeriodSeconds := int64(0)
+		evict := &policyv1.Eviction{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: pod.Namespace,
+				Name: pod.Name,
+			},
+			DeleteOptions: &metav1.DeleteOptions{
+				GracePeriodSeconds: &gracePeriodSeconds,
+			},
+		}
+		err := nodes.ClientSet.CoreV1().Pods(pod.Namespace).EvictV1(context.Background(), evict)
+		if err != nil {
+			log.Error(fmt.Sprintf("failed to evict pod %s/%s", pod.Namespace, pod.Name), err)
+		}
+	}
+
+	return false, nil, nil
 }

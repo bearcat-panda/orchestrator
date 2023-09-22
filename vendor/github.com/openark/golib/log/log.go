@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	syslog "github.com/RackSec/srslog"
+	//"log/syslog"
 	"os"
 	"runtime/debug"
 	"time"
