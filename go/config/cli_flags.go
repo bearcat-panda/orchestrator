@@ -32,6 +32,10 @@ type CLIFlags struct {
 	EnableDatabaseUpdate       *bool
 	IgnoreRaftSetup            *bool
 	Tag                        *string
+	// 是否开启漂移
+	TurnDrift 				   *bool
+	// 是否是优先漂移
+	IsDriftPriority			   *bool
 }
 
 var RuntimeCLIFlags CLIFlags

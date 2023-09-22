@@ -1706,13 +1706,11 @@ func checkAndExecuteFailureDetectionProcesses(analysisEntry inst.ReplicationAnal
 	return true, true, err
 }
 
-func getCheckAndRecoverFunction(analysisCode inst.AnalysisCode, analyzedInstanceKey *inst.InstanceKey) (
+func getCheckAndRecoverFunctionOld(analysisCode inst.AnalysisCode, analyzedInstanceKey *inst.InstanceKey) (
 	checkAndRecoverFunction func(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *inst.InstanceKey, forceInstanceRecovery bool, skipProcesses bool) (recoveryAttempted bool, topologyRecovery *TopologyRecovery, err error),
 	isActionableRecovery bool,
 ) {
 	switch analysisCode {
-	case inst.ServerDrift:
-		return ServerDrift, true
 	// master
 	case inst.DeadMaster, inst.DeadMasterAndSomeReplicas:
 		if isInEmergencyOperationGracefulPeriod(analyzedInstanceKey) {
@@ -1771,6 +1769,83 @@ func getCheckAndRecoverFunction(analysisCode inst.AnalysisCode, analyzedInstance
 
 	return nil, false
 }
+func getCheckAndRecoverFunction(analysisEntry inst.ReplicationAnalysis, analyzedInstanceKey *inst.InstanceKey) (
+	checkAndRecoverFunction func(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *inst.InstanceKey, forceInstanceRecovery bool, skipProcesses bool) (recoveryAttempted bool, topologyRecovery *TopologyRecovery, err error),
+	isActionableRecovery bool,
+) {
+	switch analysisEntry.Analysis {
+	// master
+	case inst.DeadMaster, inst.DeadMasterAndSomeReplicas:
+		if isInEmergencyOperationGracefulPeriod(analyzedInstanceKey) {
+			return checkAndRecoverGenericProblem, false
+		} else {
+			return checkAndRecoverDeadMaster, true
+		}
+	case inst.LockedSemiSyncMaster:
+		if isInEmergencyOperationGracefulPeriod(analyzedInstanceKey) {
+			return checkAndRecoverGenericProblem, false
+		} else {
+			return checkAndRecoverLockedSemiSyncMaster, true
+		}
+	case inst.MasterWithTooManySemiSyncReplicas:
+		return checkAndRecoverMasterWithTooManySemiSyncReplicas, true
+	// intermediate master
+	case inst.DeadIntermediateMaster:
+		return checkAndRecoverDeadIntermediateMaster, true
+	case inst.DeadIntermediateMasterAndSomeReplicas:
+		return checkAndRecoverDeadIntermediateMaster, true
+	case inst.DeadIntermediateMasterWithSingleReplicaFailingToConnect:
+		return checkAndRecoverDeadIntermediateMaster, true
+	case inst.AllIntermediateMasterReplicasFailingToConnectOrDead:
+		return checkAndRecoverDeadIntermediateMaster, true
+	case inst.DeadIntermediateMasterAndReplicas:
+		return checkAndRecoverGenericProblem, false
+	// co-master
+	case inst.DeadCoMaster:
+		return checkAndRecoverDeadCoMaster, true
+	case inst.DeadCoMasterAndSomeReplicas:
+		return checkAndRecoverDeadCoMaster, true
+	// master, non actionable
+	case inst.DeadMasterAndReplicas:
+		return checkAndRecoverGenericProblem, false
+	case inst.UnreachableMaster:
+		return checkAndRecoverGenericProblem, false
+	case inst.UnreachableMasterWithLaggingReplicas:
+		return checkAndRecoverGenericProblem, false
+	case inst.AllMasterReplicasNotReplicating:
+		return checkAndRecoverGenericProblem, false
+	case inst.AllMasterReplicasNotReplicatingOrDead:
+		return checkAndRecoverGenericProblem, false
+	case inst.UnreachableIntermediateMasterWithLaggingReplicas:
+		return checkAndRecoverGenericProblem, false
+	// replication group members
+	case inst.DeadReplicationGroupMemberWithReplicas:
+		return checkAndRecoverDeadGroupMemberWithReplicas, true
+	// recoverable structure analysis
+	case inst.NoWriteableMasterStructureWarning:
+		return checkAndRecoverNonWriteableMaster, true
+	default:
+	if strings.Contains(string(analysisEntry.Analysis),inst.ServerDrift){
+		if config.Config.TurnDrift && config.Config.IsDriftPriority {
+			return ServerDrift, true
+		}else if  config.Config.TurnDrift && !config.Config.IsDriftPriority{
+			// 触发服务漂移
+			ServerDrift(analysisEntry, nil, false, false)
+
+			// 执行原来的处理方案
+			codeStr := strings.ReplaceAll(string(analysisEntry.Analysis),inst.ServerDrift,"")
+			analysisEntry.Analysis = inst.AnalysisCode(codeStr)
+			return getCheckAndRecoverFunction(analysisEntry, analyzedInstanceKey)
+		}
+	}
+	}
+	// Right now this is mostly causing noise with no clear action.
+	// Will revisit this in the future.
+	// case inst.AllMasterReplicasStale:
+	//   return checkAndRecoverGenericProblem, false
+
+	return nil, false
+}
 
 func runEmergentOperations(analysisEntry *inst.ReplicationAnalysis) {
 	switch analysisEntry.Analysis {
@@ -1801,7 +1876,8 @@ func executeCheckAndRecoverFunction(analysisEntry inst.ReplicationAnalysis, cand
 	atomic.AddInt64(&countPendingRecoveries, 1)
 	defer atomic.AddInt64(&countPendingRecoveries, -1)
 
-	checkAndRecoverFunction, isActionableRecovery := getCheckAndRecoverFunction(analysisEntry.Analysis, &analysisEntry.AnalyzedInstanceKey)
+	//checkAndRecoverFunction, isActionableRecovery := getCheckAndRecoverFunction(analysisEntry.Analysis, &analysisEntry.AnalyzedInstanceKey)
+	checkAndRecoverFunction, isActionableRecovery := getCheckAndRecoverFunction(analysisEntry, &analysisEntry.AnalyzedInstanceKey)
 	analysisEntry.IsActionableRecovery = isActionableRecovery
 	runEmergentOperations(&analysisEntry)
 

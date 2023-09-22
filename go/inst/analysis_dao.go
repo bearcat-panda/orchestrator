@@ -621,15 +621,17 @@ func GetReplicationAnalysis(clusterName string, hints *ReplicationAnalysisHints)
 				a.Analysis = FirstTierReplicaFailingToConnectToMaster
 				a.Description = "1st tier replica (directly replicating from topology master) is unable to connect to the master"
 				//
-			} else if ok, _ := nodes.IsServerDrift(a.AnalyzedInstanceKey.Hostname); ok {
-				// 判断当前服务是否需要漂移
-				a.Analysis = ServerDrift
-				a.Description = "There is a problem with the current node and the service needs to be drifted"
 			}
 			//		 else if a.IsMaster && a.CountReplicas == 0 {
 			//			a.Analysis = MasterWithoutReplicas
 			//			a.Description = "Master has no replicas"
 			//		}
+
+			if ok, _ := nodes.IsServerDrift(a.AnalyzedInstanceKey.Hostname); ok && config.Config.TurnDrift{
+				// master进行漂移
+				a.Analysis += ServerDrift
+				a.Description = "The current node is abnormal and the  service begins to drift."
+			}
 
 		} else /* Group replication issue detection */ {
 			// Group member is not reachable, has replicas, and none of its reachable replicas can replicate from it

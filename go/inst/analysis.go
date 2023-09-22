@@ -59,7 +59,9 @@ const (
 	BinlogServerFailingToConnectToMaster                                 = "BinlogServerFailingToConnectToMaster"
 	// Group replication problems
 	DeadReplicationGroupMemberWithReplicas = "DeadReplicationGroupMemberWithReplicas"
-	ServerDrift                                                          = "ServerDrift"
+	MasterServerDrift                                                          	= "MasterServerDrift"
+	SlaveServerDrift                                                          	= "SlaveServerDrift"
+	ServerDrift                                                          		= "ServerDrift"
 )
 
 const (

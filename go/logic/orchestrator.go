@@ -490,8 +490,10 @@ func ContinuousDiscovery() {
 	inst.LoadHostnameResolveCache()
 	go handleDiscoveryRequests()
 
-	// 获取节点信息
-	nodes.NodeListWatch()
+	if config.Config.TurnDrift{
+		// 获取节点信息
+		nodes.NodeListWatch()
+	}
 
 	healthTick := time.Tick(config.HealthPollSeconds * time.Second)
 	instancePollTick := time.Tick(instancePollSecondsDuration())
