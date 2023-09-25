@@ -17,6 +17,7 @@ var ClientSet *kubernetes.Clientset
 var NodeMap = make(map [string] *corev1.Node)
 
 
+
 func init()  {
 	// Get a config to talk to the apiserver
 	cfg, err := k8sconfig.GetConfig()
@@ -84,7 +85,7 @@ func IsNodeReady(node *corev1.Node) bool {
 	return false
 }
 // 判断mysql pod所在的节点是否是正常的, 不正常则需要漂移
-func IsServerDrift(ip string) (bool, *corev1.Pod) {
+func IsServerDrift(ip string) (bool, []*corev1.Pod) {
 	podList := &corev1.PodList{}
 
 	label := "app.kubernetes.io/managed-by=mysql.presslabs.org"
@@ -99,14 +100,18 @@ func IsServerDrift(ip string) (bool, *corev1.Pod) {
 		return false, nil
 	}
 
+	var notReadyPod []*corev1.Pod
 	for _, pod := range podList.Items {
 		if strings.Contains(ip, pod.Spec.Hostname) {
 			if node, ok := NodeMap[pod.Spec.NodeName]; ok && !IsNodeReady(node) {
-				return true, &pod
+				notReadyPod = append(notReadyPod, &pod)
 			}
-			return false, nil
 		}
 
+	}
+
+	if len(notReadyPod) > 0 {
+		return true, notReadyPod
 	}
 
 	return false, nil

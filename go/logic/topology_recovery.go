@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"github.com/openark/orchestrator/go/nodes"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/strings/slices"
 	"math/rand"
 	goos "os"
 	"sort"
@@ -2309,23 +2310,78 @@ func GracefulMasterTakeover(clusterName string, designatedKey *inst.InstanceKey,
 }
 
 func ServerDrift(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *inst.InstanceKey, forceInstanceRecovery bool, skipProcesses bool) (recoveryAttempted bool, topologyRecovery *TopologyRecovery, err error)  {
-	ok, pod := nodes.IsServerDrift(analysisEntry.AnalyzedInstanceKey.Hostname)
+	ok, notReadyPods := nodes.IsServerDrift(analysisEntry.AnalyzedInstanceKey.Hostname)
 	if ok {
-		gracePeriodSeconds := int64(0)
-		evict := &policyv1.Eviction{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: pod.Namespace,
-				Name: pod.Name,
-			},
-			DeleteOptions: &metav1.DeleteOptions{
-				GracePeriodSeconds: &gracePeriodSeconds,
-			},
+
+		for _, pod := range notReadyPods {
+			gracePeriodSeconds := int64(0)
+			evict := &policyv1.Eviction{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: pod.Namespace,
+					Name: pod.Name,
+				},
+				DeleteOptions: &metav1.DeleteOptions{
+					GracePeriodSeconds: &gracePeriodSeconds,
+				},
+			}
+			log.Debugf("驱逐pod", pod.Name)
+			fmt.Println("驱逐pod", pod.Name)
+			err := nodes.ClientSet.CoreV1().Pods(pod.Namespace).EvictV1(context.Background(), evict)
+			if err != nil {
+				log.Errorf(fmt.Sprintf("failed to evict pod %s/%s", pod.Namespace, pod.Name), err)
+			}
 		}
-		err := nodes.ClientSet.CoreV1().Pods(pod.Namespace).EvictV1(context.Background(), evict)
-		if err != nil {
-			log.Error(fmt.Sprintf("failed to evict pod %s/%s", pod.Namespace, pod.Name), err)
+
+		if config.Config.TurnDrift && config.Config.IsDriftPriority {
+			inst.DriftChan <- &analysisEntry
 		}
 	}
 
 	return false, nil, nil
+}
+
+func ServerDriftRecover() bool {
+	replicationAnalysis, err := inst.GetReplicationAnalysis("", &inst.ReplicationAnalysisHints{IncludeDowntimed: true, AuditAnalysis: true})
+	if err != nil {
+		log.Errore(err)
+		return false
+	}
+	log.Debugf("持续检查master的漂移状态")
+	fmt.Println("持续检查master的漂移状态")
+	log.Infof("持续检查master的漂移状态")
+
+	if len(replicationAnalysis) == 0{
+		fmt.Println("没有错误")
+		return false
+	}
+
+	for _, v := range replicationAnalysis {
+		log.Debug("code", v.Analysis)
+		fmt.Println("code", v.Analysis)
+		if v.IsMaster && (strings.Contains(string(v.Analysis), string(inst.NoProblem)) || strings.Contains(string(v.Analysis), string(inst.UnreachableMaster))){
+			masters, err := inst.ReadClusterMaster(v.AnalyzedInstanceKey.Hostname)
+			if err != nil {
+				log.Errore(err)
+			}
+
+			for _, master := range masters {
+				if slices.Contains(master.Problems, "errant_gtid") {
+					log.Debugf("修复errant_gtid")
+					//ErrantGTIDInjectEmpty
+					inst.ErrantGTIDInjectEmpty(&master.Key)
+				}
+				if slices.Contains(master.Problems, ""){
+					log.Debugf("reset slave all")
+					inst.ExecInstance(&master.Key, "reset slave all")
+				}
+			}
+
+			log.Infof("master drift is success")
+			log.Debugf("master drift is success")
+			fmt.Println("master drift is success")
+			return true
+		}
+	}
+
+	return false
 }
