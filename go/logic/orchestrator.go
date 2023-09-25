@@ -603,6 +603,7 @@ func ContinuousDiscovery() {
 					go ExpireBlockedRecoveries()
 					go AcknowledgeCrashedRecoveries()
 					go inst.ExpireInstanceAnalysisChangelog()
+					go ServerDriftRecoverMaster("")
 
 					go func() {
 						// This function is non re-entrant (it can only be running once at any point in time)
@@ -625,6 +626,12 @@ func ContinuousDiscovery() {
 					go inst.SnapshotTopologies()
 				}
 			}()
+		case  <- inst.DriftChan:
+			for {
+				if ok := ServerDriftRecover(); ok{
+					break
+				}
+			}
 		}
 	}
 }

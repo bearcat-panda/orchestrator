@@ -2310,10 +2310,8 @@ func GracefulMasterTakeover(clusterName string, designatedKey *inst.InstanceKey,
 }
 
 func ServerDrift(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *inst.InstanceKey, forceInstanceRecovery bool, skipProcesses bool) (recoveryAttempted bool, topologyRecovery *TopologyRecovery, err error)  {
-	ok, notReadyPods := nodes.IsServerDrift(analysisEntry.AnalyzedInstanceKey.Hostname)
+	ok, pod := nodes.IsServerDrift(analysisEntry.AnalyzedInstanceKey.Hostname)
 	if ok {
-
-		for _, pod := range notReadyPods {
 			gracePeriodSeconds := int64(0)
 			evict := &policyv1.Eviction{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2330,12 +2328,10 @@ func ServerDrift(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *i
 			if err != nil {
 				log.Errorf(fmt.Sprintf("failed to evict pod %s/%s", pod.Namespace, pod.Name), err)
 			}
+			if config.Config.TurnDrift && config.Config.IsDriftPriority {
+				inst.DriftChan <- &analysisEntry
+			}
 		}
-
-		if config.Config.TurnDrift && config.Config.IsDriftPriority {
-			inst.DriftChan <- &analysisEntry
-		}
-	}
 
 	return false, nil, nil
 }
@@ -2359,22 +2355,7 @@ func ServerDriftRecover() bool {
 		log.Debug("code", v.Analysis)
 		fmt.Println("code", v.Analysis)
 		if v.IsMaster && (strings.Contains(string(v.Analysis), string(inst.NoProblem)) || strings.Contains(string(v.Analysis), string(inst.UnreachableMaster))){
-			masters, err := inst.ReadClusterMaster(v.AnalyzedInstanceKey.Hostname)
-			if err != nil {
-				log.Errore(err)
-			}
-
-			for _, master := range masters {
-				if slices.Contains(master.Problems, "errant_gtid") {
-					log.Debugf("修复errant_gtid")
-					//ErrantGTIDInjectEmpty
-					inst.ErrantGTIDInjectEmpty(&master.Key)
-				}
-				if slices.Contains(master.Problems, ""){
-					log.Debugf("reset slave all")
-					inst.ExecInstance(&master.Key, "reset slave all")
-				}
-			}
+			ServerDriftRecoverMaster(v.AnalyzedInstanceKey.Hostname)
 
 			log.Infof("master drift is success")
 			log.Debugf("master drift is success")
@@ -2384,4 +2365,30 @@ func ServerDriftRecover() bool {
 	}
 
 	return false
+}
+
+func ServerDriftRecoverMaster(name string) {
+	masters := [](*inst.Instance){}
+	var err error
+	if name != "" {
+		masters, err = inst.ReadClusterMaster(name)
+	} else {
+		masters, err = inst.ReadCoMaster()
+	}
+
+	if err != nil {
+		log.Errore(err)
+	}
+
+	for _, master := range masters {
+		if slices.Contains(master.Problems, "errant_gtid") {
+			log.Debugf("修复errant_gtid")
+			//ErrantGTIDInjectEmpty
+			inst.ErrantGTIDInjectEmpty(&master.Key)
+		}
+		if slices.Contains(master.Problems, "not replicating"){
+			log.Debugf("reset slave all")
+			inst.ExecInstance(&master.Key, "reset slave all")
+		}
+	}
 }
