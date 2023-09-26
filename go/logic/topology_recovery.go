@@ -2346,16 +2346,28 @@ func ServerDriftRecover() bool {
 	fmt.Println("持续检查master的漂移状态")
 	log.Infof("持续检查master的漂移状态")
 
-	if len(replicationAnalysis) == 0{
+	if len(replicationAnalysis) == 0 {
 		fmt.Println("没有错误")
-		return false
+		instances, err := inst.ReadAllInstance()
+		if err != nil {
+			log.Errore(err)
+			return false
+		}
+
+		for _, instance := range instances {
+			if instance.IsLastCheckValid && (instance.IsMaster() || instance.IsCoMaster){
+				fmt.Println("master状态正常")
+				return true
+			}
+		}
+
 	}
 
+
 	for _, v := range replicationAnalysis {
-		log.Debug("code", v.Analysis)
-		fmt.Println("code", v.Analysis)
-		if v.IsMaster && (strings.Contains(string(v.Analysis), string(inst.NoProblem)) || strings.Contains(string(v.Analysis), string(inst.UnreachableMaster))){
-			ServerDriftRecoverMaster(v.AnalyzedInstanceKey.Hostname)
+		log.Debug("code", v.Analysis, v.LastCheckValid)
+		fmt.Println("code", v.Analysis, v.LastCheckValid)
+		if (v.IsMaster || v.IsCoMaster) && (strings.Contains(string(v.Analysis), string(inst.NoProblem)) || !strings.Contains(string(v.Analysis), "Dead") || v.LastCheckValid){
 
 			log.Infof("master drift is success")
 			log.Debugf("master drift is success")
@@ -2367,28 +2379,45 @@ func ServerDriftRecover() bool {
 	return false
 }
 
-func ServerDriftRecoverMaster(name string) {
-	masters := [](*inst.Instance){}
-	var err error
-	if name != "" {
-		masters, err = inst.ReadClusterMaster(name)
-	} else {
-		masters, err = inst.ReadCoMaster()
-	}
 
+func ServerDriftProblem() {
+	instances, err := inst.ReadAllInstance()
 	if err != nil {
 		log.Errore(err)
+		return
 	}
 
-	for _, master := range masters {
-		if slices.Contains(master.Problems, "errant_gtid") {
+
+	for _, instance := range instances {
+		if slices.Contains(instance.Problems, "errant_gtid") && !instance.IsMaster() && !instance.IsCoMaster {
 			log.Debugf("修复errant_gtid")
 			//ErrantGTIDInjectEmpty
-			inst.ErrantGTIDInjectEmpty(&master.Key)
+			inst.ErrantGTIDInjectEmpty(&instance.Key)
 		}
-		if slices.Contains(master.Problems, "not replicating"){
+		if slices.Contains(instance.Problems, "not_replicating") && (instance.IsMaster() || instance.IsCoMaster){
 			log.Debugf("reset slave all")
-			inst.ExecInstance(&master.Key, "reset slave all")
+			inst.ExecInstance(&instance.Key, "reset slave all")
+		}
+		if slices.Contains(instance.Problems, "not_replicating") && (!instance.IsMaster() && !instance.IsCoMaster) {
+			log.Debugf("start slave")
+			inst.ExecInstance(&instance.Key, `start slave`)
+		}
+
+		if (!instance.IsMaster() && !instance.IsCoMaster) && (!instance.ReplicationIOThreadRuning || !instance.ReplicationSQLThreadRuning){
+			log.Debugf("start slave")
+			inst.ExecInstance(&instance.Key, `start slave`)
 		}
 	}
+}
+func ServerDriftRemoveMaster(analysisEntry inst.ReplicationAnalysis) {
+	_, pod := nodes.IsServerDrift(analysisEntry.AnalyzedInstanceKey.Hostname)
+
+
+	log.Debugf("删除旧master", pod.Name)
+	fmt.Println("删除旧master", pod.Name)
+	err := nodes.ClientSet.CoreV1().Pods(pod.Namespace).Delete(context.Background(), pod.Name, metav1.DeleteOptions{})
+	if err != nil {
+		log.Errorf(fmt.Sprintf("failed to delete pod %s/%s", pod.Namespace, pod.Name), err)
+	}
+
 }

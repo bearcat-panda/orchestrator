@@ -17,6 +17,7 @@
 package logic
 
 import (
+	"fmt"
 	"github.com/openark/orchestrator/go/nodes"
 	"math/rand"
 	"os"
@@ -603,7 +604,7 @@ func ContinuousDiscovery() {
 					go ExpireBlockedRecoveries()
 					go AcknowledgeCrashedRecoveries()
 					go inst.ExpireInstanceAnalysisChangelog()
-					go ServerDriftRecoverMaster("")
+					go ServerDriftProblem()
 
 					go func() {
 						// This function is non re-entrant (it can only be running once at any point in time)
@@ -626,12 +627,27 @@ func ContinuousDiscovery() {
 					go inst.SnapshotTopologies()
 				}
 			}()
-		case  <- inst.DriftChan:
-			for {
-				if ok := ServerDriftRecover(); ok{
-					break
+		case master,_ := <- inst.DriftChan:
+			t := time.Now()
+			go func() {
+				if atomic.CompareAndSwapInt64(&recoveryEntrance, 0, 1) {
+					defer atomic.StoreInt64(&recoveryEntrance, 0)
 				}
-			}
+				for {
+					if ok := ServerDriftRecover(); ok{
+						break
+					}
+
+
+					if time.Now().Second() - t.Second() >= 60 {
+						fmt.Println("超时,进行主从切换,并移除旧master")
+						ServerDriftRemoveMaster(*master)
+						GracefulMasterTakeover(master.ClusterDetails.ClusterName, nil, true)
+						break
+					}
+
+				}
+			}()
 		}
 	}
 }

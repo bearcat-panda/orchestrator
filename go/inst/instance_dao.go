@@ -1397,11 +1397,9 @@ func ReadClusterMaster(clusterName string) ([](*Instance), error) {
 	return readInstancesByCondition(condition, sqlutils.Args(clusterName), "read_only asc, replication_depth asc")
 }
 
-func ReadCoMaster() ([](*Instance), error) {
-	condition := `
-		is_co_master
-	`
-	return readInstancesByCondition(condition, sqlutils.Args(), "read_only asc, replication_depth asc")
+func ReadAllInstance() ([](*Instance), error) {
+	condition := `1=1`
+	return readInstancesByCondition(condition, sqlutils.Args(), "")
 }
 
 // ReadWriteableClustersMasters returns writeable masters of all clusters, but only one
