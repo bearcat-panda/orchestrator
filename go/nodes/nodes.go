@@ -11,7 +11,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"os"
 	k8sconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
-	"strings"
 )
 var ClientSet *kubernetes.Clientset
 var NodeMap = make(map [string] *corev1.Node)
@@ -101,12 +100,12 @@ func IsServerDrift(ip string) (bool, *corev1.Pod) {
 	}
 
 	for _, pod := range podList.Items {
-		if strings.Contains(ip, pod.Spec.Hostname) {
+		//if strings.Contains(ip, pod.Spec.Hostname) {
 			if node, ok := NodeMap[pod.Spec.NodeName]; ok && !IsNodeReady(node) {
 				return true, &pod
 			}
-			return false, nil
-		}
+			//return false, nil
+		//}
 
 	}
 
