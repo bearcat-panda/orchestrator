@@ -1829,9 +1829,9 @@ func getCheckAndRecoverFunction(analysisEntry inst.ReplicationAnalysis, analyzed
 	if strings.Contains(string(analysisEntry.Analysis),inst.ServerDrift){
 		if config.Config.TurnDrift && config.Config.IsDriftPriority {
 			return ServerDrift, true
-		}else if  config.Config.TurnDrift && !config.Config.IsDriftPriority{
+		}else if  config.Config.TurnDrift && !config.Config.IsDriftPriority {
 			// 触发服务漂移
-			ServerDrift(analysisEntry, nil, false, false)
+			go ServerDrift(analysisEntry, nil, false, false)
 
 			// 执行原来的处理方案
 			codeStr := strings.ReplaceAll(string(analysisEntry.Analysis),inst.ServerDrift,"")
@@ -2313,6 +2313,8 @@ func ServerDrift(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *i
 	ok, pod := nodes.IsServerDrift(analysisEntry.AnalyzedInstanceKey.Hostname)
 	if ok {
 			gracePeriodSeconds := int64(0)
+			deletePolicy := metav1.DeletePropagationForeground
+
 			evict := &policyv1.Eviction{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: pod.Namespace,
@@ -2320,6 +2322,7 @@ func ServerDrift(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *i
 				},
 				DeleteOptions: &metav1.DeleteOptions{
 					GracePeriodSeconds: &gracePeriodSeconds,
+					PropagationPolicy: &deletePolicy,
 				},
 			}
 			log.Debugf("驱逐pod", pod.Name)
@@ -2328,8 +2331,11 @@ func ServerDrift(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *i
 			if err != nil {
 				log.Errorf(fmt.Sprintf("failed to evict pod %s/%s", pod.Namespace, pod.Name), err)
 			}
-			if config.Config.TurnDrift && config.Config.IsDriftPriority {
+
+		if config.Config.TurnDrift && config.Config.IsDriftPriority && (analysisEntry.IsMaster || analysisEntry.IsCoMaster){
 				inst.DriftChan <- &analysisEntry
+			} else if config.Config.TurnDrift && !config.Config.IsDriftPriority && (analysisEntry.IsMaster || analysisEntry.IsCoMaster){
+				GracefulMasterTakeover(analysisEntry.ClusterDetails.ClusterName, nil, true)
 			}
 		}
 
@@ -2396,6 +2402,7 @@ func ServerDriftProblem() {
 		}
 		if slices.Contains(instance.Problems, "not_replicating") && (instance.IsMaster() || instance.IsCoMaster){
 			log.Debugf("reset slave all")
+			inst.ExecInstance(&instance.Key, "stop slave")
 			inst.ExecInstance(&instance.Key, "reset slave all")
 		}
 		if slices.Contains(instance.Problems, "not_replicating") && (!instance.IsMaster() && !instance.IsCoMaster) {
