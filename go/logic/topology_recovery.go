@@ -2361,8 +2361,9 @@ func ServerDriftRecoverOld() bool {
 		}
 
 		for _, instance := range instances {
-			if instance.IsLastCheckValid && (instance.IsMaster() || instance.IsCoMaster){
+			if instance.IsLastCheckValid && instance.IsRecentlyChecked && (instance.IsMaster() || instance.IsCoMaster){
 				fmt.Println("master状态正常")
+				fmt.Println(instance.LastSeenTimestamp)
 				return true
 			}
 		}
@@ -2373,7 +2374,8 @@ func ServerDriftRecoverOld() bool {
 	for _, v := range replicationAnalysis {
 		log.Debug("code", v.Analysis, v.LastCheckValid)
 		fmt.Println("code", v.Analysis, v.LastCheckValid)
-		if (v.IsMaster || v.IsCoMaster) && (strings.Contains(string(v.Analysis), string(inst.NoProblem)) || !strings.Contains(string(v.Analysis), "Dead") || v.LastCheckValid){
+		if (v.IsMaster || v.IsCoMaster) && (strings.Contains(string(v.Analysis), string(inst.NoProblem))) &&
+			v.LastCheckValid  {
 
 			log.Infof("master drift is success")
 			log.Debugf("master drift is success")
@@ -2384,30 +2386,44 @@ func ServerDriftRecoverOld() bool {
 
 	return false
 }
+
 func ServerDriftRecover() bool {
 
 	log.Debugf("持续检查master的漂移状态")
 	fmt.Println("持续检查master的漂移状态")
 	log.Infof("持续检查master的漂移状态")
 
+	var count int
 
-	instances, err := inst.ReadAllInstance()
-	if err != nil {
-		log.Errore(err)
-		return false
-	}
-
-	for _, instance := range instances {
-		if instance.IsLastCheckValid && (instance.IsMaster() || instance.IsCoMaster){
-			fmt.Println("master状态正常")
-			return true
+	for i := 0; i < 3 ; i++ {
+		instances, err := inst.ReadAllInstance()
+		if err != nil {
+			log.Errore(err)
+			return false
 		}
+
+		for _, instance := range instances {
+			if instance.IsLastCheckValid && (instance.IsMaster() || instance.IsCoMaster) &&
+				instance.Uptime > 5{
+				fmt.Println("master状态正常")
+				fmt.Println(count)
+				count++
+			}
+		}
+
+		time.Sleep(10 * time.Second)
 	}
+
+	if count == 3 {
+		fmt.Println("master drift is success")
+		return true
+	}
+
+
 
 
 	return false
 }
-
 
 func ServerDriftProblem() {
 	instances, err := inst.ReadAllInstance()

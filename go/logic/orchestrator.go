@@ -633,9 +633,10 @@ func ContinuousDiscovery() {
 				if atomic.CompareAndSwapInt64(&recoveryEntrance, 0, 1) {
 					defer atomic.StoreInt64(&recoveryEntrance, 0)
 				}
+				//等待2个检测周期
 				for {
 					if ok := ServerDriftRecover(); ok{
-						break
+						return
 					}
 
 
@@ -643,7 +644,7 @@ func ContinuousDiscovery() {
 						fmt.Println("超时,进行主从切换,并移除旧master")
 						ServerDriftRemoveMaster(*master)
 						GracefulMasterTakeover(master.ClusterDetails.ClusterName, nil, true)
-						break
+						return
 					}
 
 				}
