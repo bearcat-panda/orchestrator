@@ -2342,7 +2342,7 @@ func ServerDrift(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *i
 	return false, nil, nil
 }
 
-func ServerDriftRecover() bool {
+func ServerDriftRecoverOld() bool {
 	replicationAnalysis, err := inst.GetReplicationAnalysis("", &inst.ReplicationAnalysisHints{IncludeDowntimed: true, AuditAnalysis: true})
 	if err != nil {
 		log.Errore(err)
@@ -2381,6 +2381,29 @@ func ServerDriftRecover() bool {
 			return true
 		}
 	}
+
+	return false
+}
+func ServerDriftRecover() bool {
+
+	log.Debugf("持续检查master的漂移状态")
+	fmt.Println("持续检查master的漂移状态")
+	log.Infof("持续检查master的漂移状态")
+
+
+	instances, err := inst.ReadAllInstance()
+	if err != nil {
+		log.Errore(err)
+		return false
+	}
+
+	for _, instance := range instances {
+		if instance.IsLastCheckValid && (instance.IsMaster() || instance.IsCoMaster){
+			fmt.Println("master状态正常")
+			return true
+		}
+	}
+
 
 	return false
 }
