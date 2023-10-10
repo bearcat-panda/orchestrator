@@ -2335,7 +2335,7 @@ func ServerDrift(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *i
 		if config.Config.TurnDrift && config.Config.IsDriftPriority && (analysisEntry.IsMaster || analysisEntry.IsCoMaster){
 				inst.DriftChan <- &analysisEntry
 			} else if config.Config.TurnDrift && !config.Config.IsDriftPriority && (analysisEntry.IsMaster || analysisEntry.IsCoMaster){
-				GracefulMasterTakeover(analysisEntry.ClusterDetails.ClusterName, nil, true)
+				//GracefulMasterTakeover(analysisEntry.ClusterDetails.ClusterName, nil, true)
 			}
 		}
 
