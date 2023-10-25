@@ -2426,6 +2426,9 @@ func ServerDriftRecover() bool {
 }
 
 func ServerDriftProblem() {
+	if !config.Config.TurnDrift {
+		return
+	}
 	instances, err := inst.ReadAllInstance()
 	if err != nil {
 		log.Errore(err)
