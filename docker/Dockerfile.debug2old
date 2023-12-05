@@ -16,10 +16,6 @@
 
 FROM golang:1.20.8-alpine as build
 
-RUN export http_proxy=http://127.0.0.1:7890
-RUN export https_proxy=http://127.0.0.1:7890
-
-
 ENV GOPATH=/tmp/go
 
 RUN apk --no-cache add libcurl rsync gcc g++ build-base bash git openssl musl-dev perl-utils
@@ -34,11 +30,6 @@ RUN rsync -av $(find /tmp/orchestrator-release -type d -name orchestrator-client
 RUN cp conf/orchestrator-sample-sqlite.conf.json /etc/orchestrator.conf.json
 
 FROM alpine:3.14
-
-RUN export http_proxy=http://127.0.0.1:7890
-RUN export https_proxy=http://127.0.0.1:7890
-
-
 USER root
 RUN apk --no-cache add bash curl jq openssl wget
 ENV DOCKERIZE_VERSION v0.6.1
@@ -49,7 +40,7 @@ RUN set -ex \
         tar \
         openssl \
     && mkdir /etc/orchestrator /var/lib/orchestrator \
-    && wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-alpine-linux-amd64-$DOCKERIZE_VERSION.tar.gz -O- | \
+    && wget https://ghproxy.com/https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-alpine-linux-amd64-$DOCKERIZE_VERSION.tar.gz -O- | \
         tar -C /usr/local/bin -xzv
 
 EXPOSE 3000
