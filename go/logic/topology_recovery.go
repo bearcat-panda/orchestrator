@@ -2442,7 +2442,7 @@ func ServerDriftProblem() {
 			//ErrantGTIDInjectEmpty
 			inst.ErrantGTIDInjectEmpty(&instance.Key)
 		}
-		if slices.Contains(instance.Problems, "not_replicating") && (instance.IsMaster() || instance.IsCoMaster){
+		/*if slices.Contains(instance.Problems, "not_replicating") && (instance.IsMaster() || instance.IsCoMaster){
 			log.Debugf("reset slave all")
 			inst.ExecInstance(&instance.Key, "stop slave")
 			inst.ExecInstance(&instance.Key, "reset slave all")
@@ -2455,7 +2455,7 @@ func ServerDriftProblem() {
 		if (!instance.IsMaster() && !instance.IsCoMaster) && (!instance.ReplicationIOThreadRuning || !instance.ReplicationSQLThreadRuning){
 			log.Debugf("start slave")
 			inst.ExecInstance(&instance.Key, `start slave`)
-		}
+		}*/
 	}
 }
 func ServerDriftRemoveMaster(analysisEntry inst.ReplicationAnalysis) {
