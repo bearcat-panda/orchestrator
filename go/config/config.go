@@ -280,6 +280,10 @@ type Configuration struct {
 	ReasonableLockedSemiSyncMasterSeconds      uint              // Time to evaluate the LockedSemiSyncHypothesis before triggering the LockedSemiSync analysis; falls back to ReasonableReplicationLagSeconds if not set
 	TurnDrift								   bool				 // If true, orchestrator will attempt to turn drift
 	IsDriftPriority							   bool				 // If true, orchestrator will attempt to turn drift priority
+	DriftTimeOut                               int               // Time to wait for drift,Default is 60s
+	MasterStateDetect                          int 				 // Master status detection times,Default is 3s
+	MasterStateDetectinterval                  int 				 // Master status detection interval,Default is 10s
+
 }
 
 // ToJSONString will marshal this configuration as JSON
@@ -455,6 +459,9 @@ func newConfiguration() *Configuration {
 		EnforceExactSemiSyncReplicas:               false,
 		RecoverLockedSemiSyncMaster:                false,
 		ReasonableLockedSemiSyncMasterSeconds:      0,
+		DriftTimeOut: 								60,
+		MasterStateDetect: 							3,
+		MasterStateDetectinterval: 				    10,
 	}
 }
 

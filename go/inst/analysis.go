@@ -25,7 +25,9 @@ import (
 )
 
 type AnalysisCode string
-var DriftChan = make(chan *ReplicationAnalysis)
+
+
+
 
 const (
 	NoProblem                                               AnalysisCode = "NoProblem"

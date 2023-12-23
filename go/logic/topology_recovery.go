@@ -57,6 +57,13 @@ const (
 	ReplicationGroupMemberRecovery              = "ReplicationGroupMemberRecovery"
 )
 
+var DriftChan = make(chan *DriftInfo)
+
+type DriftInfo struct {
+	ReplicationAnalysis *inst.ReplicationAnalysis
+	TopologyRecovery *TopologyRecovery
+}
+
 type RecoveryAcknowledgement struct {
 	CreatedAt time.Time
 	Owner     string
@@ -2310,8 +2317,32 @@ func GracefulMasterTakeover(clusterName string, designatedKey *inst.InstanceKey,
 }
 
 func ServerDrift(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *inst.InstanceKey, forceInstanceRecovery bool, skipProcesses bool) (recoveryAttempted bool, topologyRecovery *TopologyRecovery, err error)  {
-	ok, pod := nodes.IsServerDrift(analysisEntry.AnalyzedInstanceKey.Hostname)
+	if !(forceInstanceRecovery || analysisEntry.ClusterDetails.HasAutomatedMasterRecovery) {
+		return false, nil, nil
+	}
+	topologyRecovery, err = AttemptRecoveryRegistration(&analysisEntry, !forceInstanceRecovery, !forceInstanceRecovery)
+	if topologyRecovery == nil {
+		AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("found an active or recent recovery on %+v. Will not issue another RecoverDeadMaster.", analysisEntry.AnalyzedInstanceKey))
+		return false, nil, err
+	}
+
+	// That's it! We must do recovery!
+	AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("will handle DeadMaster event on %+v", analysisEntry.ClusterDetails.ClusterName))
+	/*recoverDeadMasterCounter.Inc(1)
+	recoveryAttempted, _, lostReplicas, err := recoverDeadMaster(topologyRecovery, candidateInstanceKey, skipProcesses)
+	if err != nil {
+		AuditTopologyRecovery(topologyRecovery, err.Error())
+	}
+	topologyRecovery.LostReplicas.AddInstances(lostReplicas)
+	if !recoveryAttempted {
+		return false, topologyRecovery, err
+	}*/
+
+
+	ok, pod := nodes.GetMasterPod()
 	if ok {
+			log.Infof("pod %s/%s is server drift start", pod.Namespace, pod.Name)
+			AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("pod %s/%s is server drift start", pod.Namespace, pod.Name))
 			gracePeriodSeconds := int64(0)
 			deletePolicy := metav1.DeletePropagationForeground
 
@@ -2325,15 +2356,34 @@ func ServerDrift(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *i
 					PropagationPolicy: &deletePolicy,
 				},
 			}
-			log.Debugf("驱逐pod", pod.Name)
-			fmt.Println("驱逐pod", pod.Name)
+
 			err := nodes.ClientSet.CoreV1().Pods(pod.Namespace).EvictV1(context.Background(), evict)
 			if err != nil {
 				log.Errorf(fmt.Sprintf("failed to evict pod %s/%s", pod.Namespace, pod.Name), err)
+				AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("failed to evict pod %s/%s", pod.Namespace, pod.Name))
+
+			} else {
+				log.Info(fmt.Sprintf("success to evict pod %s/%s", pod.Namespace, pod.Name))
+				AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("success to evict pod %s/%s", pod.Namespace, pod.Name))
+			}
+
+			// 设置删除期限为零，即立即终止 Pod
+			deleteOptions := metav1.DeleteOptions{
+				GracePeriodSeconds: new(int64),
+			}
+
+			err = nodes.ClientSet.CoreV1().Pods(pod.Namespace).Delete(context.Background(), pod.Name, deleteOptions)
+			if err != nil {
+				log.Errorf(fmt.Sprintf("Failed to delete pod %s/%s", pod.Namespace, pod.Name), err)
+				AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("force delete pod %s/%s", pod.Namespace, pod.Name))
 			}
 
 		if config.Config.TurnDrift && config.Config.IsDriftPriority && (analysisEntry.IsMaster || analysisEntry.IsCoMaster){
-				inst.DriftChan <- &analysisEntry
+				driftInfo := DriftInfo{
+					ReplicationAnalysis: &analysisEntry,
+					TopologyRecovery: topologyRecovery,
+				}
+				DriftChan <- &driftInfo
 			} else if config.Config.TurnDrift && !config.Config.IsDriftPriority && (analysisEntry.IsMaster || analysisEntry.IsCoMaster){
 				//GracefulMasterTakeover(analysisEntry.ClusterDetails.ClusterName, nil, true)
 			}
@@ -2342,60 +2392,15 @@ func ServerDrift(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *i
 	return false, nil, nil
 }
 
-func ServerDriftRecoverOld() bool {
-	replicationAnalysis, err := inst.GetReplicationAnalysis("", &inst.ReplicationAnalysisHints{IncludeDowntimed: true, AuditAnalysis: true})
-	if err != nil {
-		log.Errore(err)
-		return false
-	}
-	log.Debugf("持续检查master的漂移状态")
-	fmt.Println("持续检查master的漂移状态")
-	log.Infof("持续检查master的漂移状态")
 
-	if len(replicationAnalysis) == 0 {
-		fmt.Println("没有错误")
-		instances, err := inst.ReadAllInstance()
-		if err != nil {
-			log.Errore(err)
-			return false
-		}
+func ServerDriftRecover(info *DriftInfo) bool {
 
-		for _, instance := range instances {
-			if instance.IsLastCheckValid && instance.IsRecentlyChecked && (instance.IsMaster() || instance.IsCoMaster){
-				fmt.Println("master状态正常")
-				fmt.Println(instance.LastSeenTimestamp)
-				return true
-			}
-		}
-
-	}
-
-
-	for _, v := range replicationAnalysis {
-		log.Debug("code", v.Analysis, v.LastCheckValid)
-		fmt.Println("code", v.Analysis, v.LastCheckValid)
-		if (v.IsMaster || v.IsCoMaster) && (strings.Contains(string(v.Analysis), string(inst.NoProblem))) &&
-			v.LastCheckValid  {
-
-			log.Infof("master drift is success")
-			log.Debugf("master drift is success")
-			fmt.Println("master drift is success")
-			return true
-		}
-	}
-
-	return false
-}
-
-func ServerDriftRecover() bool {
-
-	log.Debugf("持续检查master的漂移状态")
-	fmt.Println("持续检查master的漂移状态")
-	log.Infof("持续检查master的漂移状态")
+	log.Info("Continuously check the drift status of the master")
+	AuditTopologyRecovery(info.TopologyRecovery, "Continuously check the drift status of the master")
 
 	var count int
 
-	for i := 0; i < 3 ; i++ {
+	for i := 0; i < config.Config.MasterStateDetect ; i++ {
 		instances, err := inst.ReadAllInstance()
 		if err != nil {
 			log.Errore(err)
@@ -2404,67 +2409,65 @@ func ServerDriftRecover() bool {
 
 		for _, instance := range instances {
 			if instance.IsLastCheckValid && (instance.IsMaster() || instance.IsCoMaster) &&
-				instance.Uptime > 5{
-				fmt.Println("master状态正常")
-				fmt.Println(count)
+				instance.Uptime > 1{
+				log.Infof("master %s status is success", instance.MasterKey.Hostname)
+				AuditTopologyRecovery(info.TopologyRecovery, fmt.Sprintf("master %s status is success %d", instance.MasterKey.Hostname, count))
 				count++
 			}
 		}
 
-		time.Sleep(10 * time.Second)
+		interval := time.Duration(config.Config.MasterStateDetectinterval)
+		time.Sleep(interval * time.Second)
 	}
 
-	if count == 3 {
-		fmt.Println("master drift is success")
+	if count >= 2 {
+		log.Info("master drift is success")
+		info.TopologyRecovery.IsSuccessful = true
+		AuditTopologyRecovery(info.TopologyRecovery, "master drift is success")
+
+		instances, err := inst.ReadAllInstance()
+		if err != nil {
+			log.Errore(err)
+			return false
+		}
+		for _, instance := range instances {
+			if (instance.IsMaster() || instance.IsCoMaster){
+				inst.ExecInstance(&instance.Key, "reset slave all " + instance.Key.String())
+				AuditTopologyRecovery(info.TopologyRecovery, "execued reset slave all " + instance.Key.String())
+			}
+			if !(instance.IsMaster() || instance.IsCoMaster) && slices.Contains(instance.Problems, "errant_gtid"){
+				log.Infof("repair errant_gtid ", instance.Key.String())
+				AuditTopologyRecovery(info.TopologyRecovery, "repair errant_gtid "+instance.Key.String())
+				inst.ErrantGTIDInjectEmpty(&instance.Key)
+			}
+			if !(instance.IsMaster() || instance.IsCoMaster) && (!instance.ReplicationIOThreadRuning || !instance.ReplicationSQLThreadRuning){
+				log.Infof("start replication thread ", instance.Key.String())
+				AuditTopologyRecovery(info.TopologyRecovery, "start replication thread "+instance.Key.String())
+				inst.ExecInstance(&instance.Key, `start slave`)
+			}
+		}
+
+
 		return true
 	}
 
-
-
+	log.Info("master drift is fail")
+	AuditTopologyRecovery(info.TopologyRecovery, "master drift is fail")
 
 	return false
 }
 
-func ServerDriftProblem() {
-	if !config.Config.TurnDrift {
-		return
-	}
-	instances, err := inst.ReadAllInstance()
-	if err != nil {
-		log.Errore(err)
-		return
-	}
 
-
-	for _, instance := range instances {
-		if slices.Contains(instance.Problems, "errant_gtid") && !instance.IsMaster() && !instance.IsCoMaster {
-			log.Debugf("修复errant_gtid")
-			//ErrantGTIDInjectEmpty
-			inst.ErrantGTIDInjectEmpty(&instance.Key)
-		}
-		/*if slices.Contains(instance.Problems, "not_replicating") && (instance.IsMaster() || instance.IsCoMaster){
-			log.Debugf("reset slave all")
-			inst.ExecInstance(&instance.Key, "stop slave")
-			inst.ExecInstance(&instance.Key, "reset slave all")
-		}
-		if slices.Contains(instance.Problems, "not_replicating") && (!instance.IsMaster() && !instance.IsCoMaster) {
-			log.Debugf("start slave")
-			inst.ExecInstance(&instance.Key, `start slave`)
-		}
-
-		if (!instance.IsMaster() && !instance.IsCoMaster) && (!instance.ReplicationIOThreadRuning || !instance.ReplicationSQLThreadRuning){
-			log.Debugf("start slave")
-			inst.ExecInstance(&instance.Key, `start slave`)
-		}*/
-	}
-}
 func ServerDriftRemoveMaster(analysisEntry inst.ReplicationAnalysis) {
 	_, pod := nodes.IsServerDrift(analysisEntry.AnalyzedInstanceKey.Hostname)
 
 
-	log.Debugf("删除旧master", pod.Name)
-	fmt.Println("删除旧master", pod.Name)
-	err := nodes.ClientSet.CoreV1().Pods(pod.Namespace).Delete(context.Background(), pod.Name, metav1.DeleteOptions{})
+	log.Info("Delete old master", pod.Name)
+	// 设置删除期限为零，即立即终止 Pod
+	deleteOptions := metav1.DeleteOptions{
+		GracePeriodSeconds: new(int64),
+	}
+	err := nodes.ClientSet.CoreV1().Pods(pod.Namespace).Delete(context.Background(), pod.Name, deleteOptions)
 	if err != nil {
 		log.Errorf(fmt.Sprintf("failed to delete pod %s/%s", pod.Namespace, pod.Name), err)
 	}

@@ -604,7 +604,6 @@ func ContinuousDiscovery() {
 					go ExpireBlockedRecoveries()
 					go AcknowledgeCrashedRecoveries()
 					go inst.ExpireInstanceAnalysisChangelog()
-					go ServerDriftProblem()
 
 					go func() {
 						// This function is non re-entrant (it can only be running once at any point in time)
@@ -627,7 +626,7 @@ func ContinuousDiscovery() {
 					go inst.SnapshotTopologies()
 				}
 			}()
-		case master,_ := <- inst.DriftChan:
+		case info,_ := <- DriftChan:
 			t := time.Now()
 			go func() {
 				if atomic.CompareAndSwapInt64(&recoveryEntrance, 0, 1) {
@@ -635,13 +634,15 @@ func ContinuousDiscovery() {
 				}
 				//等待2个检测周期
 				for {
-					if ok := ServerDriftRecover(); ok{
+					if ok := ServerDriftRecover(info); ok{
 						return
 					}
 
 
-					if time.Now().Second() - t.Second() >= 60 {
-						fmt.Println("超时,进行主从切换,并移除旧master")
+					if time.Now().Unix() - t.Unix() >= int64(config.Config.DriftTimeOut) {
+						log.Info("Timeout, perform master-slave switch, and remove the old master")
+						AuditTopologyRecovery(info.TopologyRecovery, fmt.Sprintf("Timeout, perform master-slave switch, and remove the old master"))
+						master := info.ReplicationAnalysis
 						ServerDriftRemoveMaster(*master)
 						GracefulMasterTakeover(master.ClusterDetails.ClusterName, nil, true)
 						return
