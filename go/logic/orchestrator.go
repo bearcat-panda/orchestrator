@@ -500,7 +500,8 @@ func ContinuousDiscovery() {
 	instancePollTick := time.Tick(instancePollSecondsDuration())
 	caretakingTick := time.Tick(time.Minute)
 	raftCaretakingTick := time.Tick(10 * time.Minute)
-	recoveryTick := time.Tick(time.Duration(config.RecoveryPollSeconds) * time.Second)
+	//recoveryTick := time.Tick(time.Duration(config.RecoveryPollSeconds) * time.Second)
+	recoveryTick := time.Tick(time.Duration(config.Config.RecoveryInterval) * time.Second)
 	autoPseudoGTIDTick := time.Tick(time.Duration(config.PseudoGTIDIntervalSeconds) * time.Second)
 	var recoveryEntrance int64
 	var snapshotTopologiesTick <-chan time.Time

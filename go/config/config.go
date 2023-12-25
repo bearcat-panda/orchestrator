@@ -273,16 +273,17 @@ type Configuration struct {
 	ConsulMaxKVsPerTransaction                 int               // Maximum number of KV operations to perform in a single Consul Transaction. Requires the "consul-txn" ConsulKVStoreProvider
 	ZkAddress                                  string            // UNSUPPERTED YET. Address where (single or multiple) ZooKeeper servers are found, in `srv1[:port1][,srv2[:port2]...]` format. Default port is 2181. Example: srv-a,srv-b:12181,srv-c
 	KVClusterMasterPrefix                      string            // Prefix to use for clusters' masters entries in KV stores (internal, consul, ZK), default: "mysql/master"
-	WebMessage                                 string            // If provided, will be shown on all web pages below the title bar
-	MaxConcurrentReplicaOperations             int               // Maximum number of concurrent operations on replicas
-	EnforceExactSemiSyncReplicas               bool              // If true, semi-sync replicas will be enabled/disabled to match the wait count in the desired priority order; this applies to LockedSemiSyncMaster and MasterWithTooManySemiSyncReplicas
-	RecoverLockedSemiSyncMaster                bool              // If true, orchestrator will recover from a LockedSemiSync state by enabling semi-sync on replicas to match the wait count; this behavior can be overridden by EnforceExactSemiSyncReplicas
-	ReasonableLockedSemiSyncMasterSeconds      uint              // Time to evaluate the LockedSemiSyncHypothesis before triggering the LockedSemiSync analysis; falls back to ReasonableReplicationLagSeconds if not set
-	TurnDrift								   bool				 // If true, orchestrator will attempt to turn drift
-	IsDriftPriority							   bool				 // If true, orchestrator will attempt to turn drift priority
-	DriftTimeOut                               int               // Time to wait for drift,Default is 60s
-	MasterStateDetect                          int 				 // Master status detection times,Default is 3s
-	MasterStateDetectinterval                  int 				 // Master status detection interval,Default is 10s
+	WebMessage                            string                 // If provided, will be shown on all web pages below the title bar
+	MaxConcurrentReplicaOperations        int                    // Maximum number of concurrent operations on replicas
+	EnforceExactSemiSyncReplicas          bool                   // If true, semi-sync replicas will be enabled/disabled to match the wait count in the desired priority order; this applies to LockedSemiSyncMaster and MasterWithTooManySemiSyncReplicas
+	RecoverLockedSemiSyncMaster           bool                   // If true, orchestrator will recover from a LockedSemiSync state by enabling semi-sync on replicas to match the wait count; this behavior can be overridden by EnforceExactSemiSyncReplicas
+	ReasonableLockedSemiSyncMasterSeconds uint                   // Time to evaluate the LockedSemiSyncHypothesis before triggering the LockedSemiSync analysis; falls back to ReasonableReplicationLagSeconds if not set
+	TurnDrift                             bool                   // If true, orchestrator will attempt to turn drift
+	IsDriftPriority                       bool                   // If true, orchestrator will attempt to turn drift priority
+	DriftTimeOut                          int                    // Time to wait for drift,Default is 60s
+	MasterStateDetect                     int                    // Master status detection times,Default is 3s
+	MasterStateDetectinterval             int                    // Master status detection interval,Default is 10s
+	RecoveryInterval                      int                    // mysql automatic recovery time,Default is 1s
 
 }
 
@@ -452,16 +453,17 @@ func newConfiguration() *Configuration {
 		ConsulCrossDataCenterDistribution:          false,
 		ConsulKVStoreProvider:                      "consul",
 		ConsulMaxKVsPerTransaction:                 ConsulKVsPerCluster,
-		ZkAddress:                                  "",
-		KVClusterMasterPrefix:                      "mysql/master",
-		WebMessage:                                 "",
-		MaxConcurrentReplicaOperations:             5,
-		EnforceExactSemiSyncReplicas:               false,
-		RecoverLockedSemiSyncMaster:                false,
-		ReasonableLockedSemiSyncMasterSeconds:      0,
-		DriftTimeOut: 								60,
-		MasterStateDetect: 							3,
-		MasterStateDetectinterval: 				    10,
+		ZkAddress:                             "",
+		KVClusterMasterPrefix:                 "mysql/master",
+		WebMessage:                            "",
+		MaxConcurrentReplicaOperations:        5,
+		EnforceExactSemiSyncReplicas:          false,
+		RecoverLockedSemiSyncMaster:           false,
+		ReasonableLockedSemiSyncMasterSeconds: 0,
+		DriftTimeOut:                          60,
+		MasterStateDetect:                     3,
+		MasterStateDetectinterval:             5,
+		RecoveryInterval:                      1,
 	}
 }
 

@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"github.com/openark/orchestrator/go/nodes"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/openark/orchestrator/go/config"
@@ -632,9 +631,6 @@ func GetReplicationAnalysis(clusterName string, hints *ReplicationAnalysisHints)
 				// master进行漂移
 				a.Analysis += ServerDrift
 				a.Description = "The current node is abnormal and the  service begins to drift."
-			} else if config.Config.TurnDrift && strings.Contains(string(a.Analysis), DeadMaster) {
-				a.Analysis += ServerDrift
-				a.Description = "The master service begins to drift."
 			}
 
 		} else /* Group replication issue detection */ {
