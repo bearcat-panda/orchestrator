@@ -2317,27 +2317,11 @@ func GracefulMasterTakeover(clusterName string, designatedKey *inst.InstanceKey,
 }
 
 func ServerDrift(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *inst.InstanceKey, forceInstanceRecovery bool, skipProcesses bool) (recoveryAttempted bool, topologyRecovery *TopologyRecovery, err error)  {
-	if !(forceInstanceRecovery || analysisEntry.ClusterDetails.HasAutomatedMasterRecovery) {
-		return false, nil, nil
-	}
-	topologyRecovery, err = AttemptRecoveryRegistration(&analysisEntry, !forceInstanceRecovery, !forceInstanceRecovery)
-	if topologyRecovery == nil {
-		AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("found an active or recent recovery on %+v. Will not issue another RecoverDeadMaster.", analysisEntry.AnalyzedInstanceKey))
-		return false, nil, err
-	}
+
+	topologyRecovery = NewTopologyRecovery(analysisEntry)
 
 	// That's it! We must do recovery!
 	AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("will handle DeadMaster event on %+v", analysisEntry.ClusterDetails.ClusterName))
-	/*recoverDeadMasterCounter.Inc(1)
-	recoveryAttempted, _, lostReplicas, err := recoverDeadMaster(topologyRecovery, candidateInstanceKey, skipProcesses)
-	if err != nil {
-		AuditTopologyRecovery(topologyRecovery, err.Error())
-	}
-	topologyRecovery.LostReplicas.AddInstances(lostReplicas)
-	if !recoveryAttempted {
-		return false, topologyRecovery, err
-	}*/
-
 
 	ok, pod := nodes.GetMasterPod()
 	if ok {
@@ -2386,6 +2370,9 @@ func ServerDrift(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *i
 				DriftChan <- &driftInfo
 			} else if config.Config.TurnDrift && !config.Config.IsDriftPriority && (analysisEntry.IsMaster || analysisEntry.IsCoMaster){
 				//GracefulMasterTakeover(analysisEntry.ClusterDetails.ClusterName, nil, true)
+				topologyRecovery.IsSuccessful = true
+				topologyRecovery.IsActive = false
+				AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("drift pod %s/%s complete", pod.Namespace, pod.Name))
 			}
 		}
 
@@ -2423,6 +2410,8 @@ func ServerDriftRecover(info *DriftInfo) bool {
 	if count >= 2 {
 		log.Info("master drift is success")
 		info.TopologyRecovery.IsSuccessful = true
+		info.TopologyRecovery.IsActive = true
+
 		AuditTopologyRecovery(info.TopologyRecovery, "master drift is success")
 
 		instances, err := inst.ReadAllInstance()

@@ -642,6 +642,8 @@ func ContinuousDiscovery() {
 
 					if time.Now().Unix() - t.Unix() >= int64(config.Config.DriftTimeOut) {
 						log.Info("Timeout, perform master-slave switch, and remove the old master")
+						info.TopologyRecovery.IsSuccessful = true
+						info.TopologyRecovery.IsActive = false
 						AuditTopologyRecovery(info.TopologyRecovery, fmt.Sprintf("Timeout, perform master-slave switch, and remove the old master"))
 						master := info.ReplicationAnalysis
 						ServerDriftRemoveMaster(*master)
