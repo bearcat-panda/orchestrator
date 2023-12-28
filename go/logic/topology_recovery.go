@@ -2368,27 +2368,12 @@ func ServerDriftRecover(info *DriftInfo) bool {
 				AuditTopologyRecovery(info.TopologyRecovery, fmt.Sprintf("master %s status is success %d", instance.MasterKey.Hostname, count))
 				count++
 			}
-		}
-
-		interval := time.Duration(config.Config.MasterStateDetectinterval)
-		time.Sleep(interval * time.Second)
-	}
-
-	if count >= 2 {
-		log.Info("master drift is success")
-		info.TopologyRecovery.IsSuccessful = true
-		info.TopologyRecovery.IsActive = true
-
-		AuditTopologyRecovery(info.TopologyRecovery, "master drift is success")
-
-		instances, err := inst.ReadAllInstance()
-		if err != nil {
-			log.Errore(err)
-			return false
-		}
-		for _, instance := range instances {
 			if (instance.IsMaster() || instance.IsCoMaster){
-				_, err := inst.ExecInstance(&instance.Key, "reset slave all")
+				_, err := inst.ExecInstance(&instance.Key, "stop slave")
+				if err != nil{
+					log.Errore(err)
+				}
+				_, err = inst.ExecInstance(&instance.Key, "reset slave all")
 				if err != nil{
 					log.Errore(err)
 				}
@@ -2405,14 +2390,39 @@ func ServerDriftRecover(info *DriftInfo) bool {
 
 			}
 			if !(instance.IsMaster() || instance.IsCoMaster) && (!instance.ReplicationIOThreadRuning || !instance.ReplicationSQLThreadRuning){
-				_, err := inst.ExecInstance(&instance.Key, `start slave`)
+				_, err := inst.ExecInstance(&instance.Key, `stop slave`)
+				if err != nil{
+					log.Errore(err)
+				}
+				_, err = inst.ExecInstance(&instance.Key, `start slave`)
 				if err != nil{
 					log.Errore(err)
 				}
 				log.Infof("start replication thread ", instance.Key.String())
 				AuditTopologyRecovery(info.TopologyRecovery, "start replication thread "+instance.Key.String())
 			}
+
 		}
+
+		interval := time.Duration(config.Config.MasterStateDetectinterval)
+		time.Sleep(interval * time.Second)
+	}
+
+	if count >= 2 {
+		log.Info("master drift is success")
+		info.TopologyRecovery.IsSuccessful = true
+		info.TopologyRecovery.IsActive = true
+
+		AuditTopologyRecovery(info.TopologyRecovery, "master drift is success")
+
+		/*instances, err := inst.ReadAllInstance()
+		if err != nil {
+			log.Errore(err)
+			return false
+		}
+		for _, instance := range instances {
+
+		}*/
 
 
 		return true
