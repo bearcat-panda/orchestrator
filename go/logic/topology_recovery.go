@@ -43,7 +43,6 @@ import (
 	"github.com/openark/orchestrator/go/util"
 	"github.com/patrickmn/go-cache"
 	"github.com/rcrowley/go-metrics"
-	policyv1 "k8s.io/api/policy/v1"
 )
 
 var countPendingRecoveries int64
@@ -2321,59 +2320,27 @@ func ServerDrift(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *i
 	topologyRecovery = NewTopologyRecovery(analysisEntry)
 
 	// That's it! We must do recovery!
-	AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("will handle DeadMaster event on %+v", analysisEntry.ClusterDetails.ClusterName))
+	AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("will handle DeadMaster drift event on %+v", analysisEntry.ClusterDetails.ClusterName))
+	if ok, pod := nodes.GetOrcPod(); ok {
+		nodes.RemovePod(pod)
+	}
 
-	ok, pod := nodes.GetMasterPod()
+
+	ok, pod := nodes.IsServerDrift("")
 	if ok {
-			log.Infof("pod %s/%s is server drift start", pod.Namespace, pod.Name)
-			AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("pod %s/%s is server drift start", pod.Namespace, pod.Name))
-			gracePeriodSeconds := int64(0)
-			deletePolicy := metav1.DeletePropagationForeground
-
-			evict := &policyv1.Eviction{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: pod.Namespace,
-					Name: pod.Name,
-				},
-				DeleteOptions: &metav1.DeleteOptions{
-					GracePeriodSeconds: &gracePeriodSeconds,
-					PropagationPolicy: &deletePolicy,
-				},
-			}
-
-			err := nodes.ClientSet.CoreV1().Pods(pod.Namespace).EvictV1(context.Background(), evict)
-			if err != nil {
-				log.Errorf(fmt.Sprintf("failed to evict pod %s/%s", pod.Namespace, pod.Name), err)
-				AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("failed to evict pod %s/%s", pod.Namespace, pod.Name))
-
-			} else {
-				log.Info(fmt.Sprintf("success to evict pod %s/%s", pod.Namespace, pod.Name))
-				AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("success to evict pod %s/%s", pod.Namespace, pod.Name))
-			}
-
-			// 设置删除期限为零，即立即终止 Pod
-			deleteOptions := metav1.DeleteOptions{
-				GracePeriodSeconds: new(int64),
-			}
-
-			err = nodes.ClientSet.CoreV1().Pods(pod.Namespace).Delete(context.Background(), pod.Name, deleteOptions)
-			if err != nil {
-				log.Errorf(fmt.Sprintf("Failed to delete pod %s/%s", pod.Namespace, pod.Name), err)
-				AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("force delete pod %s/%s", pod.Namespace, pod.Name))
-			}
-
-		if config.Config.TurnDrift && config.Config.IsDriftPriority && (analysisEntry.IsMaster || analysisEntry.IsCoMaster){
-				driftInfo := DriftInfo{
-					ReplicationAnalysis: &analysisEntry,
-					TopologyRecovery: topologyRecovery,
+			nodes.RemovePod(pod)
+			if config.Config.TurnDrift && config.Config.IsDriftPriority && (analysisEntry.IsMaster || analysisEntry.IsCoMaster){
+					driftInfo := DriftInfo{
+						ReplicationAnalysis: &analysisEntry,
+						TopologyRecovery: topologyRecovery,
+					}
+					DriftChan <- &driftInfo
+				} else if config.Config.TurnDrift && !config.Config.IsDriftPriority && (analysisEntry.IsMaster || analysisEntry.IsCoMaster){
+					//GracefulMasterTakeover(analysisEntry.ClusterDetails.ClusterName, nil, true)
+					topologyRecovery.IsSuccessful = true
+					topologyRecovery.IsActive = false
+					AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("drift pod %s/%s complete", pod.Namespace, pod.Name))
 				}
-				DriftChan <- &driftInfo
-			} else if config.Config.TurnDrift && !config.Config.IsDriftPriority && (analysisEntry.IsMaster || analysisEntry.IsCoMaster){
-				//GracefulMasterTakeover(analysisEntry.ClusterDetails.ClusterName, nil, true)
-				topologyRecovery.IsSuccessful = true
-				topologyRecovery.IsActive = false
-				AuditTopologyRecovery(topologyRecovery, fmt.Sprintf("drift pod %s/%s complete", pod.Namespace, pod.Name))
-			}
 		}
 
 	return false, nil, nil
@@ -2421,18 +2388,29 @@ func ServerDriftRecover(info *DriftInfo) bool {
 		}
 		for _, instance := range instances {
 			if (instance.IsMaster() || instance.IsCoMaster){
-				inst.ExecInstance(&instance.Key, "reset slave all " + instance.Key.String())
+				_, err := inst.ExecInstance(&instance.Key, "reset slave all")
+				if err != nil{
+					log.Errore(err)
+				}
+				log.Info("execued reset slave all " + instance.Key.String())
 				AuditTopologyRecovery(info.TopologyRecovery, "execued reset slave all " + instance.Key.String())
 			}
 			if !(instance.IsMaster() || instance.IsCoMaster) && slices.Contains(instance.Problems, "errant_gtid"){
+				_,_, _, err := inst.ErrantGTIDInjectEmpty(&instance.Key)
+				if err != nil{
+					log.Errore(err)
+				}
 				log.Infof("repair errant_gtid ", instance.Key.String())
 				AuditTopologyRecovery(info.TopologyRecovery, "repair errant_gtid "+instance.Key.String())
-				inst.ErrantGTIDInjectEmpty(&instance.Key)
+
 			}
 			if !(instance.IsMaster() || instance.IsCoMaster) && (!instance.ReplicationIOThreadRuning || !instance.ReplicationSQLThreadRuning){
+				_, err := inst.ExecInstance(&instance.Key, `start slave`)
+				if err != nil{
+					log.Errore(err)
+				}
 				log.Infof("start replication thread ", instance.Key.String())
 				AuditTopologyRecovery(info.TopologyRecovery, "start replication thread "+instance.Key.String())
-				inst.ExecInstance(&instance.Key, `start slave`)
 			}
 		}
 

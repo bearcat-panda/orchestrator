@@ -2,7 +2,9 @@ package nodes
 
 import (
 	"context"
+	"fmt"
 	"github.com/openark/golib/log"
+	policyv1 "k8s.io/api/policy/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -122,6 +124,7 @@ func GetMasterPod() (bool, *corev1.Pod) {
 		log.Error("Error listing pods: %v", err)
 		return false, nil
 	}
+	log.Infof("GetMasterPod: pod list len %d", len(podList.Items))
 
 	for _, pod := range podList.Items {
 		if pod.Labels["role"] == "master" {
@@ -132,4 +135,64 @@ func GetMasterPod() (bool, *corev1.Pod) {
 	}
 
 	return false, nil
+}
+func GetOrcPod() (bool, *corev1.Pod) {
+	podList := &corev1.PodList{}
+
+	label := "app=mysql-operator,release=mysql-operator"
+
+	option := metav1.ListOptions{
+		LabelSelector: label,
+	}
+
+	podList, err := ClientSet.CoreV1().Pods("").List(context.Background(),option)
+	if err != nil {
+		log.Error("Error listing pods: %v", err)
+		return false, nil
+	}
+	log.Infof("GetOrcPod: pod list len %d", len(podList.Items))
+
+	for _, pod := range podList.Items {
+		if node, ok := NodeMap[pod.Spec.NodeName]; ok && !IsNodeReady(node) {
+			log.Infof("%s is not ready, pod %s/%s is drift", node,  pod.Namespace, pod.Name)
+			return true, &pod
+		}
+
+	}
+
+	return false, nil
+}
+func RemovePod(pod *corev1.Pod) {
+	log.Infof("pod %s/%s is server drift start", pod.Namespace, pod.Name)
+	gracePeriodSeconds := int64(0)
+	deletePolicy := metav1.DeletePropagationForeground
+
+	evict := &policyv1.Eviction{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: pod.Namespace,
+			Name: pod.Name,
+		},
+		DeleteOptions: &metav1.DeleteOptions{
+			GracePeriodSeconds: &gracePeriodSeconds,
+			PropagationPolicy: &deletePolicy,
+		},
+	}
+
+	err := ClientSet.CoreV1().Pods(pod.Namespace).EvictV1(context.Background(), evict)
+	if err != nil {
+		log.Errorf(fmt.Sprintf("failed to evict pod %s/%s", pod.Namespace, pod.Name), err)
+
+	} else {
+		log.Info(fmt.Sprintf("success to evict pod %s/%s", pod.Namespace, pod.Name))
+	}
+
+	// 设置删除期限为零，即立即终止 Pod
+	deleteOptions := metav1.DeleteOptions{
+		GracePeriodSeconds: new(int64),
+	}
+
+	err = ClientSet.CoreV1().Pods(pod.Namespace).Delete(context.Background(), pod.Name, deleteOptions)
+	if err != nil {
+		log.Errorf(fmt.Sprintf("Failed to delete pod %s/%s", pod.Namespace, pod.Name), err)
+	}
 }

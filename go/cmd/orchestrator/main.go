@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/openark/orchestrator/go/nodes"
 
 	"github.com/openark/golib/log"
 	"github.com/openark/orchestrator/go/app"
@@ -153,6 +154,10 @@ func main() {
 			*command = "help"
 			flag.Args()[0] = "cli"
 		}
+	}
+	if config.Config.TurnDrift{
+		// 获取节点信息
+		nodes.NodeListWatch()
 	}
 
 	switch {

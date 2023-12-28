@@ -18,7 +18,6 @@ package logic
 
 import (
 	"fmt"
-	"github.com/openark/orchestrator/go/nodes"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -491,10 +490,7 @@ func ContinuousDiscovery() {
 	inst.LoadHostnameResolveCache()
 	go handleDiscoveryRequests()
 
-	if config.Config.TurnDrift{
-		// 获取节点信息
-		nodes.NodeListWatch()
-	}
+
 
 	healthTick := time.Tick(config.HealthPollSeconds * time.Second)
 	instancePollTick := time.Tick(instancePollSecondsDuration())
