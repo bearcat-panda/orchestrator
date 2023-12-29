@@ -1837,7 +1837,20 @@ func getCheckAndRecoverFunction(analysisEntry inst.ReplicationAnalysis, analyzed
 			return ServerDrift, true
 		}else if  config.Config.TurnDrift && !config.Config.IsDriftPriority {
 			// 触发服务漂移
-			go ServerDrift(analysisEntry, nil, false, false)
+			// 使用 defer 启动协程，确保在 return 后执行
+			defer func() {
+				// 副本直接漂移
+				if !(analysisEntry.IsMaster || analysisEntry.IsCoMaster) {
+					log.Info("drift replica")
+					go ServerDrift(analysisEntry, nil, false, false)
+				} else if (analysisEntry.IsMaster || analysisEntry.IsCoMaster) && analysisEntry.CountReplicas == 0 && analysisEntry.CountValidReplicas == 0 {
+					log.Info("drift master")
+					go ServerDrift(analysisEntry, nil, false, false)
+				} else {
+					log.Info("Waiting for master switch")
+				}
+			}()
+			//go ServerDrift(analysisEntry, nil, false, false)
 
 			// 执行原来的处理方案
 			codeStr := strings.ReplaceAll(string(analysisEntry.Analysis),inst.ServerDrift,"")
