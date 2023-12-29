@@ -2415,16 +2415,6 @@ func ServerDriftRecover(info *DriftInfo) bool {
 
 		AuditTopologyRecovery(info.TopologyRecovery, "master drift is success")
 
-		/*instances, err := inst.ReadAllInstance()
-		if err != nil {
-			log.Errore(err)
-			return false
-		}
-		for _, instance := range instances {
-
-		}*/
-
-
 		return true
 	}
 

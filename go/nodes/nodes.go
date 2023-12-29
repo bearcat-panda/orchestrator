@@ -44,7 +44,8 @@ func NodeListWatch()  {
 		return
 	}
 	for _, node := range nodes.Items {
-		NodeMap[node.Name] = &node
+		nodeCopy := node
+		NodeMap[node.Name] = &nodeCopy
 	}
 
 	// 创建一个节点缓存器，用于缓存节点信息
@@ -62,7 +63,8 @@ func NodeListWatch()  {
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				node := newObj.(*corev1.Node)
 				log.Info("node update", node.Name, node.Status.Conditions)
-				NodeMap[node.Name] = node
+				nodeCopy := *node
+				NodeMap[node.Name] = &nodeCopy
 
 			},
 		})
