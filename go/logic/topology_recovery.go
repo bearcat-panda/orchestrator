@@ -1844,12 +1844,16 @@ func getCheckAndRecoverFunction(analysisEntry inst.ReplicationAnalysis, analyzed
 					log.Info("drift replica")
 					go ServerDrift(analysisEntry, nil, false, false)
 				} else if (analysisEntry.IsMaster || analysisEntry.IsCoMaster) && analysisEntry.CountReplicas == 0 && analysisEntry.CountValidReplicas == 0 {
-					log.Info("drift master")
 					go ServerDrift(analysisEntry, nil, false, false)
 				} else {
 					log.Info("Waiting for master switch")
 				}
 			}()
+
+			log.Info("drift orc pod")
+			if ok, pod := nodes.GetOrcPod(); ok {
+				nodes.RemovePod(pod)
+			}
 			//go ServerDrift(analysisEntry, nil, false, false)
 
 			// 执行原来的处理方案
